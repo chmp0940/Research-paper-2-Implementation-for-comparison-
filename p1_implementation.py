@@ -3,14 +3,13 @@
 ╔══════════════════════════════════════════════════════════════════════╗
 ║  P1: System Admin & KGC — OO-IRIBE-EnDKER  (Single-File Version)   ║
 ║                                                                      ║
-║  Paper: "OO-IRIBE-EnDKER" (Scientific Reports 2025)                 ║
+║  Paper: "OO-IRIBE-EnDKER" (Scientific Reports 2025)                  ║
 ║  DOI: 10.1038/s41598-025-01254-1                                    ║
+║  Plan: README.md §3 P1 (Setup, GenSK, NumUp)                        ║
 ║                                                                      ║
-║  This file contains EVERYTHING P1 needs:                             ║
-║    • Lattice primitives (TrapGen, SamplePre, SampleLeft)            ║
-║    • Data structures (PP, MSK, SK, NRno_t)                          ║
-║    • KGC algorithms (Setup, GenSK, NumUp)                           ║
-║    • Demo + tests at the bottom                                      ║
+║  This implementation follows both the paper (Construction 1–3) and   ║
+║  the README data dictionary & P1 task spec.                         ║
+║  Contains: lattice primitives, PP/MSK/SK/NRno_t, KGC algorithms.     ║
 ╚══════════════════════════════════════════════════════════════════════╝
 
 Run:
@@ -26,6 +25,12 @@ import time
 import os
 import sys
 
+# Fix Windows console: use UTF-8 for stdout so Unicode (─, ✅, etc.) prints correctly
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
 
 # ═══════════════════════════════════════════════════════════════
 #  SECTION 1: PARAMETERS
@@ -199,17 +204,24 @@ def H(identity, n, q):
 # ═══════════════════════════════════════════════════════════════
 #  SECTION 3: KGC ALGORITHMS (Setup, GenSK, NumUp)
 # ═══════════════════════════════════════════════════════════════
+#
+#  ALIGNMENT:
+#  • Paper: "OO-IRIBE-EnDKER" (Sci. Reports 2025), DOI 10.1038/s41598-025-01254-1
+#    — Construction steps 1–3 (Setup, GenSK, NumUp); parameters Table 5 (n=32, q=99991, σ=4).
+#  • README §3 P1 (System Admin & KGC): Setup(λ,N), GenSK(PP,ID,MSK), NumUp(PP,MSK,NL,t,RL).
+#  • Data: PP = {A, B, W, G, u_list, NL, D_no, n, m, q, sigma, l}; MSK = {R, id_to_number, allocated}.
+#  • NumUp uses MSK (id_to_number) and RL only; NL in PP per README data dictionary.
+#
 
 def setup(N, n=N_DEFAULT, q=Q_DEFAULT, sigma=SIGMA, l=L_BITS, rng=None):
     """
     Setup(1^λ, N) → (PP, MSK)
     
+    README P1: Input λ (as n,q,σ), N. TrapGen → A,T_A; NL with ≥N numbers; random B, W, u_i.
     Paper Construction Step 1:
-        • Generate A with trapdoor R via TrapGen
-        • Choose random B, W ∈ Z_q^{n×m}
-        • Choose random target vectors {u_i}
-        • Create Number List NL = [1..N]
-        • For each number, create random matrix D_no
+        • (A, T_A) ← TrapGen; B, W ← Z_q^{n×m}; {u_i}_{i∈[l]} ← Z_q^n
+        • NL with at least N numbers; for each no ∈ NL choose D_no ← Z_q^{n×m}
+        • MSK = {T_A, NL}; PP = {A, {u_i}, B, {D_no}, W}  (G is public)
     
     Returns:
         PP  = dict with public parameters  (shared with everyone)
@@ -233,7 +245,7 @@ def setup(N, n=N_DEFAULT, q=Q_DEFAULT, sigma=SIGMA, l=L_BITS, rng=None):
     # Target vectors
     u_list = [rng.integers(0, q, size=n, dtype=np.int64) for _ in range(l)]
     
-    # Number List and per-number matrices
+    # Number List (at least N numbers, paper) and per-number matrices D_no ← Z_q^{n×m}
     NL = list(range(1, N + 1))
     D_no = {no: rng.integers(0, q, size=(n, m), dtype=np.int64) for no in NL}
     
@@ -260,14 +272,12 @@ def gen_sk(PP, identity, MSK, rng=None):
     """
     GenSK(PP, ID, MSK) → SK_ID
     
+    README P1: Assign unallocated no_ID from NL to ID (only KGC knows mapping); SK_ID via SampleLeft.
     Paper Construction Step 2:
-        1. Assign unallocated number no_ID to this identity
-        2. B_ID = B + H(ID)·G
-        3. x'_ID ← small random matrix (2m × 2m)
-        4. Y_ID = [A | B_ID] · x'_ID
-        5. x''_no ← SampleLeft(A, D_{noID}, R, σ, G − Y_ID)
-        6. Combine into SK: x_{ID,noID} ∈ Z_q^{3m × 2m}
-           Satisfies: [A | B_ID | D_{noID}] · SK = G  (mod q)
+        1. no_ID ← unallocated from NL, associate with ID
+        2. x'_ID ← χ^{2m×2m}_LWE; Y_ID = [A|B_ID]x'_ID, B_ID = B + H(ID)G
+        3. x''_noID ← SampleLeft(A, D_noID, T_A, σ, G − Y_ID)
+        4. x_{ID,noID} = [x'₁+x''₁; x'₂; x''₂] ∈ Z_q^{3m×2m}; [A|B_ID|D_noID]·SK = G. Output SK_ID.
     """
     if rng is None:
         rng = np.random.default_rng()
@@ -328,11 +338,10 @@ def num_up(PP, MSK, t, revocation_list):
     """
     NumUp(PP, MSK, NL, t, RL_t) → NRno_t
     
-    Paper Construction Step 3:
-        • Filter out revoked users
-        • Broadcast numbers of non-revoked users
-        • O(1) per broadcast — the scheme's key advantage
+    README P1: Identify users not in RL; collect their numbers into NRno_t; broadcast NRno_t.
+    Paper Construction Step 3: Output and broadcast set NRno_t (non-revoked users at time t). O(1).
     
+    revocation_list: set of identities in RL_t (banned users).
     Returns:
         NRno_t = {'time': t, 'numbers': set of active numbers}
     """
