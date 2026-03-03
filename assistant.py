@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 ╔══════════════════════════════════════════════════════════════════════╗
 ║  P2: Cloud Server & Key Delegation — OO-IRIBE-EnDKER                 ║
