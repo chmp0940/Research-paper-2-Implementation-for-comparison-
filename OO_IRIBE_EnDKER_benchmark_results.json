@@ -1,0 +1,26 @@
+[
+  {
+    "N_cap": 4,
+    "setup_ms": 44.1433,
+    "gen_sk_avg_ms": 8978.30945,
+    "numup_median_ms": 0.00085,
+    "offline_enc_ms": 0.704,
+    "online_enc_median_ms": 3.2958,
+    "offline_over_online": 0.21,
+    "sk_bytes": 56819712,
+    "lattice_n": 32,
+    "q": 99991
+  },
+  {
+    "N_cap": 8,
+    "setup_ms": 44.7197,
+    "gen_sk_avg_ms": 8502.293475,
+    "numup_median_ms": 0.00145,
+    "offline_enc_ms": 2.1564,
+    "online_enc_median_ms": 3.20425,
+    "offline_over_online": 0.67,
+    "sk_bytes": 56819712,
+    "lattice_n": 32,
+    "q": 99991
+  }
+]
